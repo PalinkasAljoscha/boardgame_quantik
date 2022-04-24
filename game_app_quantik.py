@@ -54,7 +54,7 @@ CHOSE_WHITE_BUTTON = (620, 10, 100, 30)
 
 def draw_token(screen, color, token_type, center_coordinates, scale=1):
     """
-    token_type
+    token_types:
     C: circle, T: Triangle, H: halfcircle, s: square
     """
     if token_type=='C':
