@@ -165,14 +165,6 @@ running = True
 f_select = None 
 picked_token = None
 
-"""
-TODO:
-- check if winner and stop update and show
-- allow play w and b 
-- text displays, for ai comp, etc.
-- why does ai play so bad ?
-"""
-
 player_choice = None
 player_color_map = {'w': COLORS['white_tokens'], 'b': COLORS['black_tokens']}
 ai_color_map = {'w': COLORS['black_tokens'], 'b': COLORS['white_tokens']}

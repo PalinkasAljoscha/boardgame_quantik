@@ -4,17 +4,20 @@ from matplotlib import colors
 from itertools import product, chain
 import random
 import math 
-
+"""
+terminology: 
+w,b for player black, white
+"""
 class QuantikBoard():
     name = "quantik"
 
     def __init__(self, verbose_output=True):
         self.verbose = verbose_output
+        # names for different shapes of tokens
         self.tokens = ["C", "H", "S", "T"]
-        self.placed = {"w": {s: [] for s in self.tokens},
-                  "b": {s: [] for s in self.tokens},   
-                 }
+        # list of fields on board
         self.fields = tuple(product(range(4), range(4)))
+        # columns, rows and squares are called spaces
         self.spaces = ([[(x,y) for x in range(4)] for y in range(4)]
                         + [[(y,x) for x in range(4)] for y in range(4)]
                         + [[(y,x) for x in range(0,2) for y in range(0,2)]]
@@ -22,28 +25,37 @@ class QuantikBoard():
                         + [[(y,x) for x in range(2,4) for y in range(2,4)]]
                         + [[(y,x) for x in range(0,2) for y in range(2,4)]]
                         )
+        # for each field, the indices of the spaces that intersect with the field
         self.field_spaceindex_map = {f: self._get_spaces_of_field_as_index(f) for f in self.fields}
-        
+        # list of played tokens on board, only used for matplot print
+        self.placed = {"w": {s: [] for s in self.tokens},
+                        "b": {s: [] for s in self.tokens},   
+                        } 
         self.free_fields = list(product(range(4), range(4)))
+        # per player and shape, list of fields where player is forbidden to put a token of shape
         self.forbidden = {"w": {s: [] for s in self.tokens},
                         "b": {s: [] for s in self.tokens},   
                         }
+        # the tokens left to play
         self.left_pieces = {"w": self.tokens*2,
                        "b": self.tokens*2,   
                        }
+        # player of current turn
         self.player = "w"
-        
+        # sequence of moves
         self.move_sequence = []
-
-        # self.winning_moves = []
-
+        # for each space (by index in self.spaces) a list of shapes of tokens present
+        # underscore stands for no token
+        # serve to determine win, i.e. all four shapes present in a space
         self.tokens_in_spaces = [['_','_','_','_'] for x in range(12)]
-         
+        # winner of the game, None until game finished
         self.winner = None
-    
+        # matrix of counts of overlapping spaces between the two fields indicated by row and colum index
         self.pairwise_space_overlap = self._get_pairwise_space_overlap()
 
     def _get_pairwise_space_overlap(self):
+        """ create a matrix of counts of overlapping spaces between
+        the two fields indicated by row and colum index"""
         overlap_matrix = [[-1 for i in range(16)] for j in range(16)]
         for i,j in product(range(16), range(16)):
             spaces_i = self.field_spaceindex_map[self.fields[i]]
@@ -52,18 +64,22 @@ class QuantikBoard():
         return overlap_matrix
 
     def new_field_signature(self, new_field):
+        """ signature of a free field is defined as list of space overlap 
+        with all fields that have been played so far """
         field_idx_seq = [self.fields.index(f) for f, _ in self.move_sequence]
         signature = [self.pairwise_space_overlap[f][self.fields.index(new_field)] for f in field_idx_seq]
         return signature
 
     def reduce_possible_moves(self, pos_moves):
+        """ all possible moves are reduced by grouping all fields with same signature
+        and only considering one representative of each group for a move """
         pos_moves_signatures = [(self.new_field_signature(f), t) for f, t in pos_moves]
         reduced_pos_moves = [pos_moves[pos_moves_signatures.index(s)] for s in pos_moves_signatures]
         return list(set(reduced_pos_moves))
 
 
     def print_board(self, show_filed_enumeration=False):
-        """ print with matplotlib """
+        """ only for debug purpose, print current board with matplotlib """
         N = 4
         plot = np.zeros((N, N))
         annotations = []
@@ -95,6 +111,7 @@ class QuantikBoard():
         ax.axis('off')
     
     def get_possible_moves(self, current_player=True, shuffle=False):
+        """ all moves that current player is allowed to make """
         possible_moves = []
         if current_player:
             player = self.player
@@ -108,13 +125,13 @@ class QuantikBoard():
         return possible_moves
 
     def make_move(self, move):
+        """ update all attributes with the move """
         field, token = move
         self.placed[self.player][token].append(field)
         self._update_forbidden(self.player, token, field)
         self.free_fields.remove(field)
         self.left_pieces[self.player].remove(token)
         self._update_tokens_in_spaces(field, token)
-        # self._update_winning_moves(field, token)
         self.move_sequence.append(move)
         if self.game_is_won():
             self.winner = self.player
@@ -127,7 +144,6 @@ class QuantikBoard():
         revert_move = self.move_sequence.pop()
         field, token = revert_move
         self._update_tokens_in_spaces(field, token, revert=True)
-        # self._update_winning_moves(field, token)
         self.left_pieces[self.player].append(token)
         self.free_fields.append(field)
         self.placed[self.player][token].remove(field)
@@ -135,6 +151,7 @@ class QuantikBoard():
         return self
 
     def game_is_won(self):
+        """ check if game is finished, by checking token list in all spaces"""
         for tokens in self.tokens_in_spaces:
             if sorted(tokens) == self.tokens:
                 return True
@@ -172,6 +189,7 @@ class QuantikBoard():
         return self
 
     def _influence_field_map(self, field):
+        """ get all fields which are in the same row, column or square as field"""
         x, y = field
         line = [(i, y) for i in range(4) if i != x]
         column = [(x, i) for i in range(4) if i != y]
@@ -214,6 +232,7 @@ class QuantikAI(QuantikBoard):
         return self
 
     def minimax_move(self):
+        """ customized minimax with reduced moves to explore """
         # first few moves are almost all equivalent, but long to minimax
         if len(self.move_sequence)<3:
             return self.random_move()
@@ -239,16 +258,13 @@ class QuantikAI(QuantikBoard):
 
 
     def alphabeta_minimax(self, maximizing_player, is_max_turn, alpha, beta, depth, file):
-        # limit child nodes to explore in each depths
-        n_explore_per_depth = {0: 18, 1:14, 2:10, 3:7, 4:5, 5:3, 6:2, 7:1, 8:1, 9:1, 10:1, 11:1, 12:1, 13:1, 14:1, 15:1, 16:1}
+        """ minimax with alpha beta pruning """
+        
         if len(self.get_possible_moves()) == 0:
-            # print("terminal draw, depth", depth, end="|")
             return 0
         elif (self.winner == maximizing_player):
-            # print("terminal win, depth", depth, end="|")
             return 1
         elif (self.winner == self._switch_player(maximizing_player)):
-            # print("terminal lose, depth", depth, end="|")
             return -1
         elif depth >= 5:
             return 0
